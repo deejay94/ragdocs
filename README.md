@@ -39,23 +39,13 @@ The core path is implemented in focused modules rather than behind a heavy RAG f
 
 ---
 
-## Architecture (target)
+## Architecture
 
-```text
-Browser (chat + docs UI)
-        │
-        ▼
-Next.js App Router (UI + API routes)
-        │
-        ├── Ingestion: parse → chunk → embed → store
-        ├── Retrieval: embed query → top-k similarity search
-        └── Generation: grounded prompt → streamed answer + citations
-                │
-                ├── Postgres + pgvector (documents, chunks, embeddings)
-                └── OpenAI (embeddings + chat)
-```
+Monolithic **Next.js App Router** app with clear internal boundaries (UI / API / RAG core / persistence)—the same high-level shape as the original Section 1 plan:
 
-Chunking, embedding, retrieval, prompting, and generation live under `src/lib/rag/`. Ingestion lives under `src/lib/documents/`. Conversation persistence lives under `src/lib/chat/`.
+![RAGDocs architecture](docs/architecture-diagram.jpg)
+
+Chat/docs UI talks to API routes for upload and Q&A. Ingestion writes files plus embedded chunks to Postgres/pgvector; retrieval runs similarity search and feeds answer generation; OpenAI supplies embeddings and chat. Chunking, embedding, retrieval, prompting, and generation live under `src/lib/rag/`. Ingestion lives under `src/lib/documents/`. Conversation persistence lives under `src/lib/chat/`. Editable Mermaid + pipeline notes: [`docs/architecture.md`](docs/architecture.md).
 
 ---
 

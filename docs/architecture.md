@@ -2,6 +2,47 @@
 
 RAGDocs is a TypeScript documentation assistant with an explicit retrieve-then-generate pipeline. Stages stay in focused modules rather than behind a heavy RAG framework.
 
+## 1. Architecture
+
+![RAGDocs architecture](architecture-diagram.jpg)
+
+```mermaid
+flowchart TB
+  subgraph client [Browser]
+    UI[Chat and Docs UI]
+  end
+
+  subgraph next [Next.js App]
+    API[API Routes]
+    Ingest[Ingestion Pipeline]
+    Retrieve[Retrieval]
+    Generate[Answer Generation]
+  end
+
+  subgraph data [Data Layer]
+    Files[Local file storage]
+    DB[(Postgres plus pgvector)]
+  end
+
+  subgraph external [External]
+    OpenAI[OpenAI Embeddings and Chat]
+  end
+
+  UI -->|upload docs| API
+  UI -->|ask question| API
+  API --> Ingest
+  API --> Retrieve
+  API --> Generate
+  Ingest --> Files
+  Ingest -->|chunks plus embeddings| DB
+  Retrieve -->|similarity search| DB
+  Retrieve --> Generate
+  Ingest --> OpenAI
+  Retrieve --> OpenAI
+  Generate --> OpenAI
+  Generate -->|answer plus citations| UI
+```
+
 ## Pipeline
 
 ```text
