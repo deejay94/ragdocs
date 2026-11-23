@@ -10,15 +10,23 @@ export default function Home() {
         Developer documentation assistant
       </h1>
       <p className="text-lg leading-relaxed text-zinc-600">
-        Upload technical docs, index them with embeddings, and prepare for
-        grounded question answering in later milestones.
+        Upload technical docs, index them with embeddings, and inspect
+        retrieval results before grounded answers land in a later milestone.
       </p>
-      <Link
-        href="/documents"
-        className="inline-flex w-fit items-center rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700"
-      >
-        Manage documents
-      </Link>
+      <div className="flex flex-wrap gap-3">
+        <Link
+          href="/documents"
+          className="inline-flex w-fit items-center rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700"
+        >
+          Manage documents
+        </Link>
+        <Link
+          href="/retrieve"
+          className="inline-flex w-fit items-center rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-50"
+        >
+          Retrieval debugger
+        </Link>
+      </div>
     </main>
   );
 }

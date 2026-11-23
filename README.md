@@ -27,7 +27,8 @@ The core path is implemented in focused modules rather than behind a heavy RAG f
 | Document upload (Markdown / plain text) | Done |
 | Chunking, embedding, and vector storage | Done |
 | Documents list / detail / delete UI | Done |
-| Semantic retrieval with similarity search | Planned |
+| Semantic retrieval with similarity search | Done |
+| Retrieval debugger UI | Done |
 | Grounded LLM answers with source citations | Planned |
 | Refusal when evidence is insufficient | Planned |
 | Chat UI with Markdown and code formatting | Planned |
@@ -51,7 +52,7 @@ Next.js App Router (UI + API routes)
                 └── OpenAI (embeddings + chat)
 ```
 
-Chunking and embedding live under `src/lib/rag/`. Ingestion orchestration lives under `src/lib/documents/`. Retrieval and answer generation land in later milestones.
+Chunking, embedding, and retrieval live under `src/lib/rag/`. Ingestion orchestration lives under `src/lib/documents/`. Answer generation lands in a later milestone.
 
 ---
 
@@ -66,8 +67,8 @@ Chunking and embedding live under `src/lib/rag/`. Ingestion orchestration lives 
 | ORM | Drizzle ORM | Typed schema and SQL migrations with first-class vector support |
 | DB driver | postgres.js | Lightweight Postgres client used by the Drizzle server singleton |
 | Local DB | Docker Compose (`pgvector/pgvector:pg16`) | Reproducible local setup |
-| LLM / embeddings | OpenAI | `text-embedding-3-small` for ingest (chat model in a later milestone) |
-| Validation | Zod | Request validation at API boundaries (document ids today) |
+| LLM / embeddings | OpenAI | `text-embedding-3-small` for ingest and query embedding (chat later) |
+| Validation | Zod | Request validation at API boundaries |
 
 ---
 
@@ -137,7 +138,10 @@ This enables the `vector` extension and creates the `documents`, `chunks`, `conv
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) or [http://localhost:3000/documents](http://localhost:3000/documents).
+Open:
+
+- [http://localhost:3000/documents](http://localhost:3000/documents) — upload and manage docs  
+- [http://localhost:3000/retrieve](http://localhost:3000/retrieve) — debug similarity search  
 
 Verify database connectivity:
 
@@ -157,7 +161,15 @@ Upload the included sample guide (requires `OPENAI_API_KEY`):
 curl -F "file=@./fixtures/sample-api-guide.md" http://localhost:3000/api/documents
 ```
 
-Or use the UI at `/documents`. After indexing, open a document to inspect chunk previews (heading path, token estimate, and text).
+Retrieve top matching chunks for a question:
+
+```bash
+curl -X POST http://localhost:3000/api/retrieve \
+  -H 'content-type: application/json' \
+  -d '{"query":"How do I authenticate API requests?"}'
+```
+
+The response includes ranked chunks, cosine similarity scores, and a `grounded` flag based on the minimum score threshold (default `0.3`). No LLM answer is generated yet.
 
 ### 6. Production build check
 
@@ -193,6 +205,17 @@ Uploading a `.md` or `.txt` file (max 2 MB) runs this path end to end:
 5. **Embed** — batch `text-embedding-3-small` vectors (1536 dimensions)  
 6. **Index** — insert chunks, then mark the document `ready` (or `failed` with an error message and no orphan chunks)
 
+## Retrieval pipeline
+
+`POST /api/retrieve` embeds the question with the same model used at ingest time, then runs cosine similarity search over ready chunks (HNSW index):
+
+1. Embed the query (`text-embedding-3-small`)  
+2. Rank chunks by `1 - cosine_distance`  
+3. Return top-k results (default `5`) with document title, heading path, content, and score  
+4. Set `grounded: true` when the best score meets `minScore` (default `0.3`)
+
+Optional `documentId` scopes search to a single document. Use `/retrieve` to inspect results visually before adding answer generation.
+
 ## Data model
 
 | Table | Purpose |
@@ -218,20 +241,23 @@ ragdocs/
     ├── app/
     │   ├── api/health/
     │   ├── api/documents/     # list, upload, detail, delete
-    │   └── documents/         # upload / manage UI
-    ├── components/documents/
+    │   ├── api/retrieve/      # semantic search
+    │   ├── documents/         # upload / manage UI
+    │   └── retrieve/          # retrieval debugger UI
+    ├── components/
     └── lib/
         ├── db/                # schema + client
         ├── documents/         # parse, store, ingest
         └── rag/
             ├── chunk.ts
-            └── embed.ts
+            ├── embed.ts
+            └── retrieve.ts
 ```
 
 Planned structure:
 
 ```text
-src/lib/rag/retrieve.ts | prompt.ts | generate.ts
+src/lib/rag/prompt.ts | generate.ts
 src/app/api/chat/
 ```
 
@@ -241,8 +267,8 @@ src/app/api/chat/
 
 1. **Project skeleton** — Next.js, TypeScript, Tailwind, env template, Docker Compose, documentation  
 2. **Database layer** — Drizzle schema and migrations for documents, chunks (pgvector), conversations, and messages  
-3. **Ingestion** — Upload Markdown/text, chunk, embed, and store with a clear status lifecycle ← *current*  
-4. **Retrieval** — Query embedding and top-k similarity search (including a debug view)  
+3. **Ingestion** — Upload Markdown/text, chunk, embed, and store with a clear status lifecycle  
+4. **Retrieval** — Query embedding and top-k similarity search (including a debug view) ← *current*  
 5. **Grounded chat** — Prompting, similarity threshold refusal, streaming answers, citation metadata  
 6. **Chat UI** — Markdown/code rendering and citation presentation  
 7. **Hardening** — Upload limits, rate limiting, retries, safer errors  
@@ -271,7 +297,7 @@ src/app/api/chat/
 
 ## Current status
 
-**Milestones 1–3 are complete.** You can upload `.md` / `.txt` docs, index them into embedded chunks, inspect chunk previews, and delete documents. Semantic retrieval and grounded chat are not implemented yet.
+**Milestones 1–4 are complete.** You can ingest docs into embedded chunks and run semantic retrieval with ranked scores via `/api/retrieve` and the `/retrieve` debugger. Grounded chat answers are not implemented yet.
 
 ---
 

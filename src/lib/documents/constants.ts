@@ -23,3 +23,15 @@ export const CHUNK_OVERLAP_RATIO = 0.12;
 export const EMBEDDING_MODEL = "text-embedding-3-small";
 export const EMBEDDING_DIMENSIONS = 1536;
 export const EMBEDDING_BATCH_SIZE = 64;
+
+/** Default number of chunks returned by similarity search. */
+export const DEFAULT_RETRIEVE_TOP_K = 5;
+
+/** Soft ceiling for topK query parameter. */
+export const MAX_RETRIEVE_TOP_K = 20;
+
+/**
+ * Minimum cosine similarity (1 - distance) to treat a result set as grounded.
+ * Tunable once the eval harness exists; used as a signal in Milestone 4.
+ */
+export const DEFAULT_RETRIEVE_MIN_SCORE = 0.3;
