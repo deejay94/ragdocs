@@ -29,8 +29,9 @@ The core path is implemented in focused modules rather than behind a heavy RAG f
 | Documents list / detail / delete UI | Done |
 | Semantic retrieval with similarity search | Done |
 | Retrieval debugger UI | Done |
-| Grounded LLM answers with source citations | Planned |
-| Refusal when evidence is insufficient | Planned |
+| Grounded LLM answers with source citations | Done |
+| Refusal when evidence is insufficient | Done |
+| Thin chat smoke UI (streaming + citation list) | Done |
 | Chat UI with Markdown and code formatting | Planned |
 | Retrieval quality eval harness | Planned |
 
@@ -52,7 +53,7 @@ Next.js App Router (UI + API routes)
                 └── OpenAI (embeddings + chat)
 ```
 
-Chunking, embedding, and retrieval live under `src/lib/rag/`. Ingestion orchestration lives under `src/lib/documents/`. Answer generation lands in a later milestone.
+Chunking, embedding, retrieval, prompting, and generation live under `src/lib/rag/`. Ingestion lives under `src/lib/documents/`. Conversation persistence lives under `src/lib/chat/`.
 
 ---
 
@@ -67,7 +68,7 @@ Chunking, embedding, and retrieval live under `src/lib/rag/`. Ingestion orchestr
 | ORM | Drizzle ORM | Typed schema and SQL migrations with first-class vector support |
 | DB driver | postgres.js | Lightweight Postgres client used by the Drizzle server singleton |
 | Local DB | Docker Compose (`pgvector/pgvector:pg16`) | Reproducible local setup |
-| LLM / embeddings | OpenAI | `text-embedding-3-small` for ingest and query embedding (chat later) |
+| LLM / embeddings | OpenAI | `text-embedding-3-small` + chat (`gpt-4o-mini` by default) |
 | Validation | Zod | Request validation at API boundaries |
 
 ---
@@ -78,7 +79,7 @@ Chunking, embedding, and retrieval live under `src/lib/rag/`. Ingestion orchestr
 - **npm**  
 - **Docker Desktop** (or another engine that supports `docker compose`) for the local database  
 - `DATABASE_URL` pointing at Postgres (required for migrations, health, and ingest)  
-- An **OpenAI API key** (required to embed uploaded documents)
+- An **OpenAI API key** (required to embed documents and generate answers)
 
 ---
 
@@ -103,7 +104,8 @@ cp .env.example .env.local
 
 | Variable | Purpose |
 | --- | --- |
-| `OPENAI_API_KEY` | Required to embed documents during ingest |
+| `OPENAI_API_KEY` | Required to embed documents and generate grounded answers |
+| `CHAT_MODEL` | Optional chat model override (default `gpt-4o-mini`) |
 | `DATABASE_URL` | Postgres connection string (matches Compose defaults) |
 
 Default database URL:
@@ -140,6 +142,7 @@ npm run dev
 
 Open:
 
+- [http://localhost:3000/chat](http://localhost:3000/chat) — grounded Q&A  
 - [http://localhost:3000/documents](http://localhost:3000/documents) — upload and manage docs  
 - [http://localhost:3000/retrieve](http://localhost:3000/retrieve) — debug similarity search  
 
@@ -169,7 +172,17 @@ curl -X POST http://localhost:3000/api/retrieve \
   -d '{"query":"How do I authenticate API requests?"}'
 ```
 
-The response includes ranked chunks, cosine similarity scores, and a `grounded` flag based on the minimum score threshold (default `0.3`). No LLM answer is generated yet.
+The response includes ranked chunks, cosine similarity scores, and a `grounded` flag based on the minimum score threshold (default `0.3`).
+
+Ask a grounded question (SSE stream — `meta` → `token`/`refusal` → `done`):
+
+```bash
+curl -N -X POST http://localhost:3000/api/chat \
+  -H 'content-type: application/json' \
+  -d '{"query":"How do I authenticate API requests?"}'
+```
+
+When retrieval is not grounded, the API returns a fixed refusal and does not call the chat model.
 
 ### 6. Production build check
 
@@ -214,7 +227,18 @@ Uploading a `.md` or `.txt` file (max 2 MB) runs this path end to end:
 3. Return top-k results (default `5`) with document title, heading path, content, and score  
 4. Set `grounded: true` when the best score meets `minScore` (default `0.3`)
 
-Optional `documentId` scopes search to a single document. Use `/retrieve` to inspect results visually before adding answer generation.
+Optional `documentId` scopes search to a single document. Use `/retrieve` to inspect results visually.
+
+## Grounded chat pipeline
+
+`POST /api/chat` runs retrieve-then-generate:
+
+1. Create or reuse a conversation; store the user message  
+2. Retrieve top-k ready chunks (same thresholds as `/api/retrieve`)  
+3. If not grounded → emit a fixed refusal, store it, **skip** the chat LLM  
+4. If grounded → prompt with numbered context chunks → stream tokens → store the assistant reply with `citationsJson`  
+
+SSE event types: `meta` (conversation id, grounded flag, citations), `token`, `refusal`, `done`, `error`. Use `/chat` for a thin smoke UI; Markdown/code highlighting is the next milestone.
 
 ## Data model
 
@@ -242,23 +266,28 @@ ragdocs/
     │   ├── api/health/
     │   ├── api/documents/     # list, upload, detail, delete
     │   ├── api/retrieve/      # semantic search
+    │   ├── api/chat/          # grounded Q&A (SSE)
     │   ├── documents/         # upload / manage UI
-    │   └── retrieve/          # retrieval debugger UI
+    │   ├── retrieve/          # retrieval debugger UI
+    │   └── chat/              # thin grounded chat UI
     ├── components/
     └── lib/
+        ├── chat/              # answer orchestration + persistence
         ├── db/                # schema + client
         ├── documents/         # parse, store, ingest
+        ├── openai.ts
         └── rag/
             ├── chunk.ts
             ├── embed.ts
-            └── retrieve.ts
+            ├── retrieve.ts
+            ├── prompt.ts
+            └── generate.ts
 ```
 
 Planned structure:
 
 ```text
-src/lib/rag/prompt.ts | generate.ts
-src/app/api/chat/
+Polished chat Markdown / citation UI (Milestone 6)
 ```
 
 ---
@@ -268,8 +297,8 @@ src/app/api/chat/
 1. **Project skeleton** — Next.js, TypeScript, Tailwind, env template, Docker Compose, documentation  
 2. **Database layer** — Drizzle schema and migrations for documents, chunks (pgvector), conversations, and messages  
 3. **Ingestion** — Upload Markdown/text, chunk, embed, and store with a clear status lifecycle  
-4. **Retrieval** — Query embedding and top-k similarity search (including a debug view) ← *current*  
-5. **Grounded chat** — Prompting, similarity threshold refusal, streaming answers, citation metadata  
+4. **Retrieval** — Query embedding and top-k similarity search (including a debug view)  
+5. **Grounded chat** — Prompting, similarity threshold refusal, streaming answers, citation metadata ← *current*  
 6. **Chat UI** — Markdown/code rendering and citation presentation  
 7. **Hardening** — Upload limits, rate limiting, retries, safer errors  
 8. **Eval + docs** — Golden-set retrieval metrics and architecture write-up  
@@ -297,7 +326,7 @@ src/app/api/chat/
 
 ## Current status
 
-**Milestones 1–4 are complete.** You can ingest docs into embedded chunks and run semantic retrieval with ranked scores via `/api/retrieve` and the `/retrieve` debugger. Grounded chat answers are not implemented yet.
+**Milestones 1–5 are complete.** You can ingest docs, retrieve chunks, and stream grounded answers (or refusals) via `/api/chat` and `/chat`. Polished Markdown/citation presentation is not implemented yet.
 
 ---
 

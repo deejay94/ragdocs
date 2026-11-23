@@ -32,6 +32,17 @@ export const MAX_RETRIEVE_TOP_K = 20;
 
 /**
  * Minimum cosine similarity (1 - distance) to treat a result set as grounded.
- * Tunable once the eval harness exists; used as a signal in Milestone 4.
+ * Tunable once the eval harness exists; used as a signal in Milestone 4+.
  */
 export const DEFAULT_RETRIEVE_MIN_SCORE = 0.3;
+
+/** Default chat model for grounded answers (override with CHAT_MODEL). */
+export const DEFAULT_CHAT_MODEL = "gpt-4o-mini";
+
+/** Fixed refusal when retrieval is not grounded — no chat LLM call. */
+export const GROUNDED_REFUSAL_MESSAGE =
+  "I couldn't find enough supporting material in the indexed documentation to answer that confidently. Try rephrasing, or upload docs that cover this topic.";
+
+export function getChatModel(): string {
+  return process.env.CHAT_MODEL?.trim() || DEFAULT_CHAT_MODEL;
+}

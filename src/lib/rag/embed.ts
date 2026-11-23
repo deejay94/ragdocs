@@ -1,21 +1,9 @@
-import OpenAI from "openai";
-
 import {
   EMBEDDING_BATCH_SIZE,
   EMBEDDING_DIMENSIONS,
   EMBEDDING_MODEL,
 } from "@/lib/documents/constants";
-
-function getOpenAIClient() {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey || apiKey === "sk-your-key-here") {
-    throw new Error(
-      "OPENAI_API_KEY is not configured. Set a real key in .env.local to ingest documents.",
-    );
-  }
-
-  return new OpenAI({ apiKey });
-}
+import { getOpenAIClient } from "@/lib/openai";
 
 /**
  * Batch-embed texts with text-embedding-3-small (1536 dimensions).
