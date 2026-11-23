@@ -33,3 +33,8 @@ if (process.env.NODE_ENV !== "production") {
 
 export const db = drizzle(client, { schema });
 export { schema };
+
+/** Close the shared Postgres client (CLI scripts / graceful shutdown). */
+export async function closeDb() {
+  await client.end({ timeout: 5 });
+}

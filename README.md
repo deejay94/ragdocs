@@ -34,7 +34,8 @@ The core path is implemented in focused modules rather than behind a heavy RAG f
 | Thin chat smoke UI (streaming + citation list) | Done |
 | Chat UI with Markdown and code formatting | Done |
 | Rate limiting, OpenAI retries, safer API errors | Done |
-| Retrieval quality eval harness | Planned |
+| Retrieval quality eval harness | Done |
+| Architecture + demo docs | Done |
 
 ---
 
@@ -211,6 +212,7 @@ npm run build
 | `npm run db:generate` | Generate SQL migrations from the Drizzle schema |
 | `npm run db:migrate` | Apply pending migrations to Postgres |
 | `npm run db:studio` | Open Drizzle Studio against `DATABASE_URL` |
+| `npm run eval:retrieval` | Run golden-set retrieval metrics (needs DB + OpenAI key) |
 
 ---
 
@@ -254,6 +256,16 @@ SSE event types: `meta` (conversation id, grounded flag, citations), `token`, `r
 - **OpenAI retries** — up to 3 attempts with exponential backoff on 429/5xx and network errors  
 - **Safer errors** — responses use stable `{ error, code }` messages; details are logged server-side  
 
+## Evaluation
+
+Golden questions live in `fixtures/eval/golden-set.json` (aligned to the sample Payments API guide). Run:
+
+```bash
+npm run eval:retrieval
+```
+
+The script indexes the fixture if needed, then reports hit@k, MRR, and grounded accuracy. It exits non-zero below the configured thresholds. Deeper architecture notes and a manual walkthrough are in [`docs/architecture.md`](docs/architecture.md) and [`docs/demo.md`](docs/demo.md).
+
 ## Data model
 
 | Table | Purpose |
@@ -272,8 +284,10 @@ Deleting a document cascades to its chunks and removes the local upload director
 ```text
 ragdocs/
 ├── docker-compose.yml
+├── docs/                      # Architecture + demo script
 ├── drizzle/
-├── fixtures/                  # Sample docs for manual ingest testing
+├── fixtures/                  # Sample docs + eval golden set
+├── scripts/                   # CLI eval harness
 ├── uploads/                   # Local uploaded files (gitignored)
 └── src/
     ├── app/
@@ -314,8 +328,8 @@ ragdocs/
 4. **Retrieval** — Query embedding and top-k similarity search (including a debug view)  
 5. **Grounded chat** — Prompting, similarity threshold refusal, streaming answers, citation metadata  
 6. **Chat UI** — Markdown/code rendering and citation presentation  
-7. **Hardening** — Upload limits, rate limiting, retries, safer errors ← *current*  
-8. **Eval + docs** — Golden-set retrieval metrics and architecture write-up  
+7. **Hardening** — Upload limits, rate limiting, retries, safer errors  
+8. **Eval + docs** — Golden-set retrieval metrics and architecture write-up ← *current*  
 
 ---
 
@@ -341,7 +355,7 @@ ragdocs/
 
 ## Current status
 
-**Milestones 1–7 are complete.** You can ingest docs, retrieve chunks, and chat with Markdown answers, citations, and refusals—with rate limits, OpenAI retries, and safer API errors. The retrieval eval harness is still planned.
+**Milestones 1–8 are complete.** Full path: ingest → retrieve → grounded chat (or refuse), with hardening plus a golden-set retrieval eval and architecture/demo docs.
 
 ---
 

@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "documentTitle": "Payments API Quickstart",
+  "fixturePath": "fixtures/sample-api-guide.md",
+  "topK": 5,
+  "minScore": 0.3,
+  "thresholds": {
+    "hitAtK": 0.7,
+    "groundedAccuracy": 0.7
+  },
+  "cases": [
+    {
+      "id": "auth-bearer",
+      "query": "How do I authenticate API requests?",
+      "expectGrounded": true,
+      "headingContains": "Authentication",
+      "contentContains": "Authorization"
+    },
+    {
+      "id": "create-charge",
+      "query": "How do I create a charge with the Payments API?",
+      "expectGrounded": true,
+      "headingContains": "Create a charge",
+      "contentContains": "/v1/charges"
+    },
+    {
+      "id": "idempotency",
+      "query": "What is the Idempotency-Key header used for?",
+      "expectGrounded": true,
+      "headingContains": "Idempotency",
+      "contentContains": "Idempotency-Key"
+    },
+    {
+      "id": "error-401",
+      "query": "What does HTTP 401 mean for this API?",
+      "expectGrounded": true,
+      "headingContains": "Error handling",
+      "contentContains": "unauthorized"
+    },
+    {
+      "id": "rate-limits",
+      "query": "What are the sandbox rate limits?",
+      "expectGrounded": true,
+      "headingContains": "Rate limits",
+      "contentContains": "100 requests per minute"
+    },
+    {
+      "id": "webhooks",
+      "query": "Which webhook events should I subscribe to for charges?",
+      "expectGrounded": true,
+      "headingContains": "Webhooks",
+      "contentContains": "charge.succeeded"
+    },
+    {
+      "id": "card-declined",
+      "query": "What error code is returned when a card is declined?",
+      "expectGrounded": true,
+      "headingContains": "Error handling",
+      "contentContains": "card_declined"
+    },
+    {
+      "id": "offtopic-mars",
+      "query": "What is the capital of Mars and the recipe for purple soup?",
+      "expectGrounded": false
+    },
+    {
+      "id": "offtopic-cooking",
+      "query": "How long should I roast a whole chicken at 425F?",
+      "expectGrounded": false
+    },
+    {
+      "id": "offtopic-unrelated-stack",
+      "query": "Explain how to configure Kubernetes Horizontal Pod Autoscaler",
+      "expectGrounded": false
+    }
+  ]
+}
