@@ -22,7 +22,8 @@ The core path is implemented in focused modules rather than behind a heavy RAG f
 | Capability | Status |
 | --- | --- |
 | Next.js + TypeScript application skeleton | Done |
-| Local Postgres + pgvector via Docker Compose | Done (infra) |
+| Local Postgres + pgvector via Docker Compose | Done |
+| Drizzle schema, migrations, and health check | Done |
 | Document upload (Markdown / plain text) | Planned |
 | Chunking, embedding, and vector storage | Planned |
 | Semantic retrieval with similarity search | Planned |
@@ -61,6 +62,8 @@ The RAG pipeline will live under `src/lib/rag/` with separate modules for chunki
 | App | Next.js (App Router) | Single TypeScript app for UI and APIs |
 | Styling | Tailwind CSS | Fast, maintainable UI without a custom design system |
 | Database | Postgres + pgvector | Documents, metadata, and vectors in one system |
+| ORM | Drizzle ORM | Typed schema and SQL migrations with first-class vector support |
+| DB driver | postgres.js | Lightweight Postgres client used by the Drizzle server singleton |
 | Local DB | Docker Compose (`pgvector/pgvector:pg16`) | Reproducible local setup |
 | LLM / embeddings | OpenAI | Simple SDK and solid defaults (`text-embedding-3-small`, chat model via env) |
 | Validation (upcoming) | Zod | Typed request/response boundaries at the API |
@@ -72,7 +75,8 @@ The RAG pipeline will live under `src/lib/rag/` with separate modules for chunki
 - **Node.js** 20 or newer  
 - **npm**  
 - **Docker Desktop** (or another engine that supports `docker compose`) for the local database  
-- An **OpenAI API key** for embedding and chat milestones (not required to run the UI skeleton)
+- `DATABASE_URL` pointing at Postgres (required for migrations and `/api/health`)  
+- An **OpenAI API key** for embedding and chat milestones (not required yet)
 
 ---
 
@@ -83,8 +87,11 @@ The RAG pipeline will live under `src/lib/rag/` with separate modules for chunki
 ```bash
 git clone https://github.com/deejay94/ragdocs.git
 cd ragdocs
+git checkout staging
 npm install
 ```
+
+Active development happens on `staging`. `main` is updated when changes are intentionally promoted.
 
 ### 2. Configure environment
 
@@ -115,7 +122,15 @@ Confirm the container is healthy:
 docker compose ps
 ```
 
-### 4. Run the app
+### 4. Run database migrations
+
+```bash
+npm run db:migrate
+```
+
+This enables the `vector` extension and creates the `documents`, `chunks`, `conversations`, and `messages` tables.
+
+### 5. Run the app
 
 ```bash
 npm run dev
@@ -123,7 +138,19 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-### 5. Production build check
+Verify database connectivity:
+
+```bash
+curl http://localhost:3000/api/health
+```
+
+Expected response when Postgres is reachable:
+
+```json
+{ "ok": true, "service": "ragdocs", "database": "up", "checkedAt": "..." }
+```
+
+### 6. Production build check
 
 ```bash
 npm run lint
@@ -140,6 +167,22 @@ npm run build
 | `npm run build` | Create an optimized production build |
 | `npm run start` | Serve the production build |
 | `npm run lint` | Run ESLint |
+| `npm run db:generate` | Generate SQL migrations from the Drizzle schema |
+| `npm run db:migrate` | Apply pending migrations to Postgres |
+| `npm run db:studio` | Open Drizzle Studio against `DATABASE_URL` |
+
+---
+
+## Data model
+
+| Table | Purpose |
+| --- | --- |
+| `documents` | Uploaded documentation metadata and ingestion status (`processing` / `ready` / `failed`) |
+| `chunks` | Text segments with `vector(1536)` embeddings and an HNSW cosine index |
+| `conversations` | Lightweight chat session IDs |
+| `messages` | Chat turns with optional citation JSON on assistant replies |
+
+Deleting a document cascades to its chunks. Deleting a conversation cascades to its messages.
 
 ---
 
@@ -147,21 +190,26 @@ npm run build
 
 ```text
 ragdocs/
-├── docker-compose.yml    # Local Postgres + pgvector
-├── .env.example          # Environment variable template
-├── public/               # Static assets
+├── docker-compose.yml         # Local Postgres + pgvector
+├── drizzle/                   # SQL migrations
+├── drizzle.config.ts          # Drizzle Kit configuration
+├── .env.example               # Environment variable template
+├── public/                    # Static assets
 └── src/
-    └── app/              # Next.js App Router (UI + future API routes)
+    ├── app/
+    │   └── api/health/        # Liveness + DB connectivity
+    └── lib/db/
+        ├── schema.ts          # Tables, enums, indexes, relations
+        └── index.ts           # Drizzle + postgres.js client
 ```
 
 Planned structure:
 
 ```text
 src/
-├── app/api/              # documents, chat, health
+├── app/api/              # documents, chat
 ├── components/           # chat, citations, upload
 └── lib/
-    ├── db/               # Drizzle schema and client
     ├── rag/              # chunk, embed, retrieve, prompt, generate
     └── documents/        # ingest orchestration
 ```
@@ -170,8 +218,8 @@ src/
 
 ## Roadmap
 
-1. **Project skeleton** — Next.js, TypeScript, Tailwind, env template, Docker Compose, documentation ← *current*  
-2. **Database layer** — Drizzle schema and migrations for documents, chunks (pgvector), conversations, and messages  
+1. **Project skeleton** — Next.js, TypeScript, Tailwind, env template, Docker Compose, documentation  
+2. **Database layer** — Drizzle schema and migrations for documents, chunks (pgvector), conversations, and messages ← *current*  
 3. **Ingestion** — Upload Markdown/text, chunk, embed, and store with a clear status lifecycle  
 4. **Retrieval** — Query embedding and top-k similarity search (including a debug view)  
 5. **Grounded chat** — Prompting, similarity threshold refusal, streaming answers, citation metadata  
@@ -202,7 +250,7 @@ src/
 
 ## Current status
 
-**Milestone 1 is complete.** The application scaffolds cleanly, environment configuration is documented, and Docker Compose provides a local pgvector-ready Postgres instance. Document ingestion, retrieval, and grounded chat are not implemented yet.
+**Milestones 1–2 are complete.** The app scaffolds cleanly, Postgres/pgvector runs locally, Drizzle migrations define the core tables, and `GET /api/health` reports database connectivity. Document ingestion, retrieval, and grounded chat are not implemented yet.
 
 ---
 
