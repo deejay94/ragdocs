@@ -101,7 +101,10 @@ export function RetrieveDebugger() {
     <div className="flex flex-col gap-8">
       <form onSubmit={onSubmit} className="flex flex-col gap-4">
         <div className="flex flex-col gap-2">
-          <label htmlFor="query" className="text-sm font-medium text-zinc-800">
+          <label
+            htmlFor="query"
+            className="text-sm font-medium text-zinc-800 dark:text-zinc-200"
+          >
             Question
           </label>
           <textarea
@@ -110,14 +113,14 @@ export function RetrieveDebugger() {
             onChange={(event) => setQuery(event.target.value)}
             rows={3}
             placeholder="How do I authenticate API requests?"
-            className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none focus:border-zinc-500"
+            className="w-full rounded-md border border-zinc-600 bg-zinc-900 px-3 py-2 text-sm text-white placeholder:text-zinc-400 shadow-sm outline-none focus:border-zinc-400"
           />
         </div>
 
         <div className="flex flex-col gap-2">
           <label
             htmlFor="documentId"
-            className="text-sm font-medium text-zinc-800"
+            className="text-sm font-medium text-zinc-800 dark:text-zinc-200"
           >
             Scope (optional)
           </label>
@@ -125,7 +128,7 @@ export function RetrieveDebugger() {
             id="documentId"
             value={documentId}
             onChange={(event) => setDocumentId(event.target.value)}
-            className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-500"
+            className="w-full rounded-md border border-zinc-600 bg-zinc-900 px-3 py-2 text-sm text-white outline-none focus:border-zinc-400"
           >
             <option value="">All ready documents</option>
             {documents.map((doc) => (

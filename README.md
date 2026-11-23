@@ -32,7 +32,7 @@ The core path is implemented in focused modules rather than behind a heavy RAG f
 | Grounded LLM answers with source citations | Done |
 | Refusal when evidence is insufficient | Done |
 | Thin chat smoke UI (streaming + citation list) | Done |
-| Chat UI with Markdown and code formatting | Planned |
+| Chat UI with Markdown and code formatting | Done |
 | Retrieval quality eval harness | Planned |
 
 ---
@@ -70,6 +70,7 @@ Chunking, embedding, retrieval, prompting, and generation live under `src/lib/ra
 | Local DB | Docker Compose (`pgvector/pgvector:pg16`) | Reproducible local setup |
 | LLM / embeddings | OpenAI | `text-embedding-3-small` + chat (`gpt-4o-mini` by default) |
 | Validation | Zod | Request validation at API boundaries |
+| Markdown UI | react-markdown + remark-gfm + rehype-highlight | Grounded answers with GFM tables and highlighted fences |
 
 ---
 
@@ -238,7 +239,7 @@ Optional `documentId` scopes search to a single document. Use `/retrieve` to ins
 3. If not grounded → emit a fixed refusal, store it, **skip** the chat LLM  
 4. If grounded → prompt with numbered context chunks → stream tokens → store the assistant reply with `citationsJson`  
 
-SSE event types: `meta` (conversation id, grounded flag, citations), `token`, `refusal`, `done`, `error`. Use `/chat` for a thin smoke UI; Markdown/code highlighting is the next milestone.
+SSE event types: `meta` (conversation id, grounded flag, citations), `token`, `refusal`, `done`, `error`. Use `/chat` for the Markdown chat UI with highlighted code and linked citations.
 
 ## Data model
 
@@ -269,8 +270,11 @@ ragdocs/
     │   ├── api/chat/          # grounded Q&A (SSE)
     │   ├── documents/         # upload / manage UI
     │   ├── retrieve/          # retrieval debugger UI
-    │   └── chat/              # thin grounded chat UI
+    │   └── chat/              # grounded chat UI
     ├── components/
+    │   ├── chat/              # Markdown answer, citations, panel
+    │   ├── documents/
+    │   └── retrieve/
     └── lib/
         ├── chat/              # answer orchestration + persistence
         ├── db/                # schema + client
@@ -284,12 +288,6 @@ ragdocs/
             └── generate.ts
 ```
 
-Planned structure:
-
-```text
-Polished chat Markdown / citation UI (Milestone 6)
-```
-
 ---
 
 ## Roadmap
@@ -298,8 +296,8 @@ Polished chat Markdown / citation UI (Milestone 6)
 2. **Database layer** — Drizzle schema and migrations for documents, chunks (pgvector), conversations, and messages  
 3. **Ingestion** — Upload Markdown/text, chunk, embed, and store with a clear status lifecycle  
 4. **Retrieval** — Query embedding and top-k similarity search (including a debug view)  
-5. **Grounded chat** — Prompting, similarity threshold refusal, streaming answers, citation metadata ← *current*  
-6. **Chat UI** — Markdown/code rendering and citation presentation  
+5. **Grounded chat** — Prompting, similarity threshold refusal, streaming answers, citation metadata  
+6. **Chat UI** — Markdown/code rendering and citation presentation ← *current*  
 7. **Hardening** — Upload limits, rate limiting, retries, safer errors  
 8. **Eval + docs** — Golden-set retrieval metrics and architecture write-up  
 
@@ -326,7 +324,7 @@ Polished chat Markdown / citation UI (Milestone 6)
 
 ## Current status
 
-**Milestones 1–5 are complete.** You can ingest docs, retrieve chunks, and stream grounded answers (or refusals) via `/api/chat` and `/chat`. Polished Markdown/citation presentation is not implemented yet.
+**Milestones 1–6 are complete.** You can ingest docs, retrieve chunks, and chat with Markdown answers, syntax-highlighted code, linked citations, and threshold refusals. Hardening and eval harness are still planned.
 
 ---
 
