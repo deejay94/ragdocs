@@ -24,8 +24,9 @@ The core path is implemented in focused modules rather than behind a heavy RAG f
 | Next.js + TypeScript application skeleton | Done |
 | Local Postgres + pgvector via Docker Compose | Done |
 | Drizzle schema, migrations, and health check | Done |
-| Document upload (Markdown / plain text) | Planned |
-| Chunking, embedding, and vector storage | Planned |
+| Document upload (Markdown / plain text) | Done |
+| Chunking, embedding, and vector storage | Done |
+| Documents list / detail / delete UI | Done |
 | Semantic retrieval with similarity search | Planned |
 | Grounded LLM answers with source citations | Planned |
 | Refusal when evidence is insufficient | Planned |
@@ -50,7 +51,7 @@ Next.js App Router (UI + API routes)
                 └── OpenAI (embeddings + chat)
 ```
 
-The RAG pipeline will live under `src/lib/rag/` with separate modules for chunking, embedding, retrieval, prompting, and generation.
+Chunking and embedding live under `src/lib/rag/`. Ingestion orchestration lives under `src/lib/documents/`. Retrieval and answer generation land in later milestones.
 
 ---
 
@@ -65,8 +66,8 @@ The RAG pipeline will live under `src/lib/rag/` with separate modules for chunki
 | ORM | Drizzle ORM | Typed schema and SQL migrations with first-class vector support |
 | DB driver | postgres.js | Lightweight Postgres client used by the Drizzle server singleton |
 | Local DB | Docker Compose (`pgvector/pgvector:pg16`) | Reproducible local setup |
-| LLM / embeddings | OpenAI | Simple SDK and solid defaults (`text-embedding-3-small`, chat model via env) |
-| Validation (upcoming) | Zod | Typed request/response boundaries at the API |
+| LLM / embeddings | OpenAI | `text-embedding-3-small` for ingest (chat model in a later milestone) |
+| Validation | Zod | Request validation at API boundaries (document ids today) |
 
 ---
 
@@ -75,8 +76,8 @@ The RAG pipeline will live under `src/lib/rag/` with separate modules for chunki
 - **Node.js** 20 or newer  
 - **npm**  
 - **Docker Desktop** (or another engine that supports `docker compose`) for the local database  
-- `DATABASE_URL` pointing at Postgres (required for migrations and `/api/health`)  
-- An **OpenAI API key** for embedding and chat milestones (not required yet)
+- `DATABASE_URL` pointing at Postgres (required for migrations, health, and ingest)  
+- An **OpenAI API key** (required to embed uploaded documents)
 
 ---
 
@@ -101,7 +102,7 @@ cp .env.example .env.local
 
 | Variable | Purpose |
 | --- | --- |
-| `OPENAI_API_KEY` | Embeddings and chat (later milestones) |
+| `OPENAI_API_KEY` | Required to embed documents during ingest |
 | `DATABASE_URL` | Postgres connection string (matches Compose defaults) |
 
 Default database URL:
@@ -136,7 +137,7 @@ This enables the `vector` extension and creates the `documents`, `chunks`, `conv
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Open [http://localhost:3000](http://localhost:3000) or [http://localhost:3000/documents](http://localhost:3000/documents).
 
 Verify database connectivity:
 
@@ -149,6 +150,14 @@ Expected response when Postgres is reachable:
 ```json
 { "ok": true, "service": "ragdocs", "database": "up", "checkedAt": "..." }
 ```
+
+Upload the included sample guide (requires `OPENAI_API_KEY`):
+
+```bash
+curl -F "file=@./fixtures/sample-api-guide.md" http://localhost:3000/api/documents
+```
+
+Or use the UI at `/documents`. After indexing, open a document to inspect chunk previews (heading path, token estimate, and text).
 
 ### 6. Production build check
 
@@ -173,6 +182,17 @@ npm run build
 
 ---
 
+## Ingestion pipeline
+
+Uploading a `.md` or `.txt` file (max 2 MB) runs this path end to end:
+
+1. **Validate** — allowlisted extensions; reject empty or oversized files; require `OPENAI_API_KEY` before writing state  
+2. **Store** — save the raw file under `uploads/{documentId}/` with a sanitized filename  
+3. **Parse** — UTF-8 text; title from the first Markdown H1 or the filename  
+4. **Chunk** — heading-aware Markdown sections, then overlapping splits (~600 tokens, ~12% overlap)  
+5. **Embed** — batch `text-embedding-3-small` vectors (1536 dimensions)  
+6. **Index** — insert chunks, then mark the document `ready` (or `failed` with an error message and no orphan chunks)
+
 ## Data model
 
 | Table | Purpose |
@@ -182,7 +202,7 @@ npm run build
 | `conversations` | Lightweight chat session IDs |
 | `messages` | Chat turns with optional citation JSON on assistant replies |
 
-Deleting a document cascades to its chunks. Deleting a conversation cascades to its messages.
+Deleting a document cascades to its chunks and removes the local upload directory. Deleting a conversation cascades to its messages.
 
 ---
 
@@ -190,28 +210,29 @@ Deleting a document cascades to its chunks. Deleting a conversation cascades to 
 
 ```text
 ragdocs/
-├── docker-compose.yml         # Local Postgres + pgvector
-├── drizzle/                   # SQL migrations
-├── drizzle.config.ts          # Drizzle Kit configuration
-├── .env.example               # Environment variable template
-├── public/                    # Static assets
+├── docker-compose.yml
+├── drizzle/
+├── fixtures/                  # Sample docs for manual ingest testing
+├── uploads/                   # Local uploaded files (gitignored)
 └── src/
     ├── app/
-    │   └── api/health/        # Liveness + DB connectivity
-    └── lib/db/
-        ├── schema.ts          # Tables, enums, indexes, relations
-        └── index.ts           # Drizzle + postgres.js client
+    │   ├── api/health/
+    │   ├── api/documents/     # list, upload, detail, delete
+    │   └── documents/         # upload / manage UI
+    ├── components/documents/
+    └── lib/
+        ├── db/                # schema + client
+        ├── documents/         # parse, store, ingest
+        └── rag/
+            ├── chunk.ts
+            └── embed.ts
 ```
 
 Planned structure:
 
 ```text
-src/
-├── app/api/              # documents, chat
-├── components/           # chat, citations, upload
-└── lib/
-    ├── rag/              # chunk, embed, retrieve, prompt, generate
-    └── documents/        # ingest orchestration
+src/lib/rag/retrieve.ts | prompt.ts | generate.ts
+src/app/api/chat/
 ```
 
 ---
@@ -219,8 +240,8 @@ src/
 ## Roadmap
 
 1. **Project skeleton** — Next.js, TypeScript, Tailwind, env template, Docker Compose, documentation  
-2. **Database layer** — Drizzle schema and migrations for documents, chunks (pgvector), conversations, and messages ← *current*  
-3. **Ingestion** — Upload Markdown/text, chunk, embed, and store with a clear status lifecycle  
+2. **Database layer** — Drizzle schema and migrations for documents, chunks (pgvector), conversations, and messages  
+3. **Ingestion** — Upload Markdown/text, chunk, embed, and store with a clear status lifecycle ← *current*  
 4. **Retrieval** — Query embedding and top-k similarity search (including a debug view)  
 5. **Grounded chat** — Prompting, similarity threshold refusal, streaming answers, citation metadata  
 6. **Chat UI** — Markdown/code rendering and citation presentation  
@@ -242,7 +263,7 @@ src/
 ## Security notes
 
 - Never commit `.env.local` or real API keys. Only `.env.example` is tracked.  
-- Uploaded files will be stored under `uploads/` locally (gitignored) in later milestones.  
+- Uploaded files are stored under `uploads/` locally and are gitignored.  
 - Treat retrieved document text as untrusted input when prompting the model (prompt-injection awareness).  
 - Before any public deployment: rate-limit chat and upload endpoints; keep OpenAI keys server-side only.
 
@@ -250,7 +271,7 @@ src/
 
 ## Current status
 
-**Milestones 1–2 are complete.** The app scaffolds cleanly, Postgres/pgvector runs locally, Drizzle migrations define the core tables, and `GET /api/health` reports database connectivity. Document ingestion, retrieval, and grounded chat are not implemented yet.
+**Milestones 1–3 are complete.** You can upload `.md` / `.txt` docs, index them into embedded chunks, inspect chunk previews, and delete documents. Semantic retrieval and grounded chat are not implemented yet.
 
 ---
 
