@@ -109,7 +109,13 @@ export function ChatPanel() {
       if (!response.ok || !response.body) {
         const data = (await response.json().catch(() => null)) as {
           error?: string;
+          code?: string;
         } | null;
+        if (response.status === 429) {
+          throw new Error(
+            data?.error ?? "Too many chat requests. Try again shortly.",
+          );
+        }
         throw new Error(data?.error ?? "Chat request failed");
       }
 

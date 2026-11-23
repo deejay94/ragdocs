@@ -4,6 +4,7 @@ import {
   EMBEDDING_MODEL,
 } from "@/lib/documents/constants";
 import { getOpenAIClient } from "@/lib/openai";
+import { withOpenAIRetry } from "@/lib/openai/retry";
 
 /**
  * Batch-embed texts with text-embedding-3-small (1536 dimensions).
@@ -19,11 +20,13 @@ export async function embedTexts(texts: string[]): Promise<number[][]> {
 
   for (let i = 0; i < texts.length; i += EMBEDDING_BATCH_SIZE) {
     const batch = texts.slice(i, i + EMBEDDING_BATCH_SIZE);
-    const response = await client.embeddings.create({
-      model: EMBEDDING_MODEL,
-      input: batch,
-      dimensions: EMBEDDING_DIMENSIONS,
-    });
+    const response = await withOpenAIRetry(() =>
+      client.embeddings.create({
+        model: EMBEDDING_MODEL,
+        input: batch,
+        dimensions: EMBEDDING_DIMENSIONS,
+      }),
+    );
 
     const ordered = [...response.data].sort((a, b) => a.index - b.index);
     for (const item of ordered) {

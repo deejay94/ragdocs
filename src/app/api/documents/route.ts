@@ -2,6 +2,17 @@ import { connection, NextResponse } from "next/server";
 
 import { ingestUploadedFile, listDocuments } from "@/lib/documents/ingest";
 import { MAX_UPLOAD_BYTES } from "@/lib/documents/constants";
+import { mapErrorToPublic } from "@/lib/http/errors";
+import {
+  assertUploadContentLength,
+  RequestTooLargeError,
+} from "@/lib/http/request";
+import { getRateLimitDocumentsWritePerMin } from "@/lib/security/constants";
+import {
+  checkRateLimit,
+  getClientIp,
+  rateLimitHeaders,
+} from "@/lib/security/rate-limit";
 
 export async function GET() {
   await connection();
@@ -10,23 +21,41 @@ export async function GET() {
     const documents = await listDocuments();
     return NextResponse.json({ documents });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Failed to list documents";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const mapped = mapErrorToPublic(error, "Failed to list documents.");
+    return NextResponse.json(mapped.body, { status: mapped.status });
   }
 }
 
 export async function POST(request: Request) {
   await connection();
 
+  const limit = getRateLimitDocumentsWritePerMin();
+  const ip = getClientIp(request);
+  const rate = checkRateLimit(`documents-write:${ip}`, limit);
+
+  if (!rate.ok) {
+    return NextResponse.json(
+      {
+        error: "Too many upload requests. Try again shortly.",
+        code: "rate_limited",
+      },
+      { status: 429, headers: rateLimitHeaders(rate, limit) },
+    );
+  }
+
   try {
+    assertUploadContentLength(request, MAX_UPLOAD_BYTES);
+
     const formData = await request.formData();
     const file = formData.get("file");
 
     if (!(file instanceof File)) {
       return NextResponse.json(
-        { error: 'Expected multipart field "file".' },
-        { status: 400 },
+        {
+          error: 'Expected multipart field "file".',
+          code: "bad_request",
+        },
+        { status: 400, headers: rateLimitHeaders(rate, limit) },
       );
     }
 
@@ -34,8 +63,9 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           error: `File exceeds the ${MAX_UPLOAD_BYTES} byte upload limit.`,
+          code: "payload_too_large",
         },
-        { status: 400 },
+        { status: 413, headers: rateLimitHeaders(rate, limit) },
       );
     }
 
@@ -50,21 +80,23 @@ export async function POST(request: Request) {
         document: result.document,
         chunkCount: result.chunkCount,
       },
-      { status: 201 },
+      { status: 201, headers: rateLimitHeaders(rate, limit) },
     );
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Failed to ingest document";
-    const status =
-      message.includes("Only .md") ||
-      message.includes("empty") ||
-      message.includes("Unsupported") ||
-      message.includes("upload limit")
-        ? 400
-        : message.includes("OPENAI_API_KEY")
-          ? 503
-          : 500;
+    if (error instanceof RequestTooLargeError) {
+      return NextResponse.json(
+        {
+          error: "Upload is too large.",
+          code: "payload_too_large",
+        },
+        { status: 413, headers: rateLimitHeaders(rate, limit) },
+      );
+    }
 
-    return NextResponse.json({ error: message }, { status });
+    const mapped = mapErrorToPublic(error, "Failed to ingest document.");
+    return NextResponse.json(mapped.body, {
+      status: mapped.status,
+      headers: rateLimitHeaders(rate, limit),
+    });
   }
 }

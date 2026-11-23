@@ -6,7 +6,15 @@ import {
   DEFAULT_RETRIEVE_TOP_K,
   MAX_RETRIEVE_TOP_K,
 } from "@/lib/documents/constants";
+import { mapErrorToPublic } from "@/lib/http/errors";
+import { readJsonBody, RequestTooLargeError } from "@/lib/http/request";
 import { retrieveRelevantChunks } from "@/lib/rag/retrieve";
+import { getRateLimitRetrievePerMin } from "@/lib/security/constants";
+import {
+  checkRateLimit,
+  getClientIp,
+  rateLimitHeaders,
+} from "@/lib/security/rate-limit";
 
 const retrieveBodySchema = z.object({
   query: z.string().trim().min(1, "Query must not be empty.").max(2000),
@@ -18,17 +26,31 @@ const retrieveBodySchema = z.object({
 export async function POST(request: Request) {
   await connection();
 
+  const limit = getRateLimitRetrievePerMin();
+  const ip = getClientIp(request);
+  const rate = checkRateLimit(`retrieve:${ip}`, limit);
+
+  if (!rate.ok) {
+    return NextResponse.json(
+      {
+        error: "Too many retrieve requests. Try again shortly.",
+        code: "rate_limited",
+      },
+      { status: 429, headers: rateLimitHeaders(rate, limit) },
+    );
+  }
+
   try {
-    const json: unknown = await request.json();
+    const json = await readJsonBody(request);
     const parsed = retrieveBodySchema.safeParse(json);
 
     if (!parsed.success) {
       return NextResponse.json(
         {
           error: "Invalid request body.",
-          details: parsed.error.flatten(),
+          code: "bad_request",
         },
-        { status: 400 },
+        { status: 400, headers: rateLimitHeaders(rate, limit) },
       );
     }
 
@@ -39,16 +61,34 @@ export async function POST(request: Request) {
       documentId: parsed.data.documentId,
     });
 
-    return NextResponse.json(result);
+    return NextResponse.json(result, {
+      headers: rateLimitHeaders(rate, limit),
+    });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Failed to retrieve chunks";
-    const status = message.includes("OPENAI_API_KEY")
-      ? 503
-      : message.includes("empty")
-        ? 400
-        : 500;
+    if (error instanceof RequestTooLargeError) {
+      return NextResponse.json(
+        {
+          error: "Request body is too large.",
+          code: "payload_too_large",
+        },
+        { status: 413, headers: rateLimitHeaders(rate, limit) },
+      );
+    }
 
-    return NextResponse.json({ error: message }, { status });
+    if (error instanceof SyntaxError) {
+      return NextResponse.json(
+        {
+          error: "Invalid JSON body.",
+          code: "bad_request",
+        },
+        { status: 400, headers: rateLimitHeaders(rate, limit) },
+      );
+    }
+
+    const mapped = mapErrorToPublic(error, "Failed to retrieve chunks.");
+    return NextResponse.json(mapped.body, {
+      status: mapped.status,
+      headers: rateLimitHeaders(rate, limit),
+    });
   }
 }

@@ -9,6 +9,7 @@ import {
   getConversation,
 } from "@/lib/chat/store";
 import type { ChatStreamEvent, Citation } from "@/lib/chat/types";
+import { publicErrorMessage } from "@/lib/http/errors";
 import { streamGroundedAnswer } from "@/lib/rag/generate";
 import { retrieveRelevantChunks } from "@/lib/rag/retrieve";
 
@@ -114,9 +115,10 @@ export async function* answerQuestion(
       yield { type: "token", content: token };
     }
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Failed to generate answer";
-    yield { type: "error", error: message };
+    yield {
+      type: "error",
+      error: publicErrorMessage(error, "Failed to generate answer."),
+    };
     return;
   }
 

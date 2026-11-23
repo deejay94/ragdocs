@@ -33,6 +33,7 @@ The core path is implemented in focused modules rather than behind a heavy RAG f
 | Refusal when evidence is insufficient | Done |
 | Thin chat smoke UI (streaming + citation list) | Done |
 | Chat UI with Markdown and code formatting | Done |
+| Rate limiting, OpenAI retries, safer API errors | Done |
 | Retrieval quality eval harness | Planned |
 
 ---
@@ -107,6 +108,9 @@ cp .env.example .env.local
 | --- | --- |
 | `OPENAI_API_KEY` | Required to embed documents and generate grounded answers |
 | `CHAT_MODEL` | Optional chat model override (default `gpt-4o-mini`) |
+| `RATE_LIMIT_CHAT_PER_MIN` | Optional chat POST ceiling per IP (default `10`) |
+| `RATE_LIMIT_RETRIEVE_PER_MIN` | Optional retrieve POST ceiling per IP (default `30`) |
+| `RATE_LIMIT_DOCUMENTS_WRITE_PER_MIN` | Optional upload POST ceiling per IP (default `10`) |
 | `DATABASE_URL` | Postgres connection string (matches Compose defaults) |
 
 Default database URL:
@@ -185,6 +189,8 @@ curl -N -X POST http://localhost:3000/api/chat \
 
 When retrieval is not grounded, the API returns a fixed refusal and does not call the chat model.
 
+Write endpoints are rate-limited per IP (in-memory). Bursting chat/upload/retrieve returns `429` with `Retry-After`. JSON bodies are capped at 32 KB; uploads remain capped at 2 MB.
+
 ### 6. Production build check
 
 ```bash
@@ -241,6 +247,13 @@ Optional `documentId` scopes search to a single document. Use `/retrieve` to ins
 
 SSE event types: `meta` (conversation id, grounded flag, citations), `token`, `refusal`, `done`, `error`. Use `/chat` for the Markdown chat UI with highlighted code and linked citations.
 
+## Hardening
+
+- **Rate limits** — fixed-window per IP on `POST /api/chat`, `POST /api/retrieve`, and `POST /api/documents` (single-process memory; use Redis for multi-instance)  
+- **Body limits** — 32 KB JSON for chat/retrieve; 2 MB file uploads  
+- **OpenAI retries** — up to 3 attempts with exponential backoff on 429/5xx and network errors  
+- **Safer errors** — responses use stable `{ error, code }` messages; details are logged server-side  
+
 ## Data model
 
 | Table | Purpose |
@@ -279,7 +292,10 @@ ragdocs/
         ├── chat/              # answer orchestration + persistence
         ├── db/                # schema + client
         ├── documents/         # parse, store, ingest
+        ├── http/              # public errors + body limits
         ├── openai.ts
+        ├── openai/            # retry helper
+        ├── security/          # rate limits
         └── rag/
             ├── chunk.ts
             ├── embed.ts
@@ -297,8 +313,8 @@ ragdocs/
 3. **Ingestion** — Upload Markdown/text, chunk, embed, and store with a clear status lifecycle  
 4. **Retrieval** — Query embedding and top-k similarity search (including a debug view)  
 5. **Grounded chat** — Prompting, similarity threshold refusal, streaming answers, citation metadata  
-6. **Chat UI** — Markdown/code rendering and citation presentation ← *current*  
-7. **Hardening** — Upload limits, rate limiting, retries, safer errors  
+6. **Chat UI** — Markdown/code rendering and citation presentation  
+7. **Hardening** — Upload limits, rate limiting, retries, safer errors ← *current*  
 8. **Eval + docs** — Golden-set retrieval metrics and architecture write-up  
 
 ---
@@ -318,13 +334,14 @@ ragdocs/
 - Never commit `.env.local` or real API keys. Only `.env.example` is tracked.  
 - Uploaded files are stored under `uploads/` locally and are gitignored.  
 - Treat retrieved document text as untrusted input when prompting the model (prompt-injection awareness).  
-- Before any public deployment: rate-limit chat and upload endpoints; keep OpenAI keys server-side only.
+- Chat, retrieve, and upload endpoints are rate-limited per IP in-process; swap in a shared store before multi-instance deploy.  
+- Keep OpenAI keys server-side only.
 
 ---
 
 ## Current status
 
-**Milestones 1–6 are complete.** You can ingest docs, retrieve chunks, and chat with Markdown answers, syntax-highlighted code, linked citations, and threshold refusals. Hardening and eval harness are still planned.
+**Milestones 1–7 are complete.** You can ingest docs, retrieve chunks, and chat with Markdown answers, citations, and refusals—with rate limits, OpenAI retries, and safer API errors. The retrieval eval harness is still planned.
 
 ---
 
