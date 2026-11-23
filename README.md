@@ -2,20 +2,18 @@
 
 **RAGDocs** is an AI-powered developer documentation assistant built with retrieval-augmented generation (RAG). Upload technical documentation, ask natural-language questions, and receive answers grounded in retrieved source chunks—with citations and explicit refusal when the docs do not contain the answer.
 
-This repository is a portfolio project focused on clear architecture, TypeScript end to end, and implementation choices that are easy to explain to other developers.
-
 ---
 
-## Why this project
+## Overview
 
-Modern AI demos often hide the retrieval pipeline behind heavy frameworks. RAGDocs keeps the core path explicit:
+RAGDocs keeps the retrieval pipeline explicit and easy to follow:
 
 1. **Ingest** documentation into chunked, embedded units of text  
 2. **Retrieve** the most relevant chunks for a question  
 3. **Generate** an answer constrained to that context  
-4. **Cite** the sources that supported the answer—or say the docs do not cover it  
+4. **Cite** the sources that supported the answer—or state that the docs do not cover it  
 
-The goal is a system you can demo, debug, and walk through step by step in a technical conversation.
+The core path is implemented in focused modules rather than behind a heavy RAG framework, so each stage—chunking, embedding, retrieval, and prompting—stays visible and maintainable.
 
 ---
 
@@ -51,7 +49,7 @@ Next.js App Router (UI + API routes)
                 └── OpenAI (embeddings + chat)
 ```
 
-The RAG pipeline will live in focused modules under `src/lib/rag/` so each stage—chunking, embedding, retrieval, prompting—can be inspected and explained independently. A full RAG framework is intentionally avoided for the core path.
+The RAG pipeline will live under `src/lib/rag/` with separate modules for chunking, embedding, retrieval, prompting, and generation.
 
 ---
 
@@ -60,11 +58,11 @@ The RAG pipeline will live in focused modules under `src/lib/rag/` so each stage
 | Layer | Choice | Rationale |
 | --- | --- | --- |
 | Language | TypeScript | Shared types across UI, API, and RAG data models |
-| App | Next.js (App Router) | Single deployable TypeScript app for UI and APIs |
+| App | Next.js (App Router) | Single TypeScript app for UI and APIs |
 | Styling | Tailwind CSS | Fast, maintainable UI without a custom design system |
 | Database | Postgres + pgvector | Documents, metadata, and vectors in one system |
 | Local DB | Docker Compose (`pgvector/pgvector:pg16`) | Reproducible local setup |
-| LLM / embeddings | OpenAI | Simple SDK, strong defaults for demos (`text-embedding-3-small`, chat model via env) |
+| LLM / embeddings | OpenAI | Simple SDK and solid defaults (`text-embedding-3-small`, chat model via env) |
 | Validation (upcoming) | Zod | Typed request/response boundaries at the API |
 
 ---
@@ -74,7 +72,7 @@ The RAG pipeline will live in focused modules under `src/lib/rag/` so each stage
 - **Node.js** 20 or newer  
 - **npm**  
 - **Docker Desktop** (or another engine that supports `docker compose`) for the local database  
-- An **OpenAI API key** when you reach embedding and chat milestones (not required to run the UI skeleton)
+- An **OpenAI API key** for embedding and chat milestones (not required to run the UI skeleton)
 
 ---
 
@@ -123,7 +121,7 @@ docker compose ps
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). You should see the RAGDocs placeholder page for the current milestone.
+Open [http://localhost:3000](http://localhost:3000).
 
 ### 5. Production build check
 
@@ -156,7 +154,7 @@ ragdocs/
     └── app/              # Next.js App Router (UI + future API routes)
 ```
 
-Upcoming structure (planned):
+Planned structure:
 
 ```text
 src/
@@ -170,9 +168,7 @@ src/
 
 ---
 
-## Implementation roadmap
-
-Work is split into small, demoable milestones:
+## Roadmap
 
 1. **Project skeleton** — Next.js, TypeScript, Tailwind, env template, Docker Compose, documentation ← *current*  
 2. **Database layer** — Drizzle schema and migrations for documents, chunks (pgvector), conversations, and messages  
@@ -187,11 +183,11 @@ Work is split into small, demoable milestones:
 
 ## Design principles
 
-- **Teachable pipeline** — Prefer explicit modules over opaque framework magic for the RAG core.  
+- **Explicit pipeline** — Prefer clear modules over opaque framework magic for the RAG core.  
 - **Grounding first** — Answers must be tied to retrieved context; insufficient evidence yields a clear refusal.  
-- **Citations as a product feature** — Every grounded answer should show where claims came from.  
+- **Citations by default** — Grounded answers show where claims came from.  
 - **TypeScript throughout** — Shared models for documents, chunks, citations, and API contracts.  
-- **Portfolio-ready hygiene** — Clear README, intentional commits, and no secrets in the repository.
+- **Safe defaults** — No secrets in the repository; server-side API keys only.
 
 ---
 
@@ -206,7 +202,7 @@ Work is split into small, demoable milestones:
 
 ## Current status
 
-**Milestone 1 is complete.** The application scaffolds cleanly, the README and env template are in place, and Docker Compose provides a local pgvector-ready Postgres instance. Document ingestion, retrieval, and grounded chat are not implemented yet.
+**Milestone 1 is complete.** The application scaffolds cleanly, environment configuration is documented, and Docker Compose provides a local pgvector-ready Postgres instance. Document ingestion, retrieval, and grounded chat are not implemented yet.
 
 ---
 
